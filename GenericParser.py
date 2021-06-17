@@ -16,8 +16,9 @@ warnings.filterwarnings('ignore')
 class GenericParser():
     def __init__(self, 
                  filename: str, 
-                 output_name: str, 
-                 output_path: str,  
+                 output_doc_name: str,
+                 output_doc_path: str, 
+                 output_img_path: str,
                  model_name: str, 
                  language: str, 
                  cl: float,
@@ -27,8 +28,9 @@ class GenericParser():
         """
         Arguments:
              filename: absolute path to the file
-             output_name: self-defined name for the output images
-             output_path: relative path of the output images
+             output_doc_name: self-defined name for the output images of the whole pages
+             output_doc_path: relative path of the output images of whe whole pages
+             output_img_path: relative path of the output figures of current page
              start_page: first page to be processed
              end_page: last page to be processed
              model_name: name of the computer vision model, defined by user 
@@ -53,8 +55,11 @@ class GenericParser():
         self.end_page = end_page
     
         
-        self.output_name = output_name
-        self.output_path = output_path,
+        self.output_doc_name = output_doc_name
+        self.output_doc_path = output_doc_path,
+        
+        self.output_img_path = output_img_path
+
 
 
     def refine_text_block(self,text: str):
@@ -101,21 +106,27 @@ class GenericParser():
         mat = fitz.Matrix(zoom_x, zomm_y)
         pix = page.get_pixmap(matrix=mat)
         
-        pix.writeImage(f'{self.output_path[0]}/{self.output_name}-0{page_number}.png')
+        pix.writeImage(f'{self.output_doc_path[0]}/{self.output_doc_name}-0{page_number}.png')
         
 
     
-    def convert_image(self,page_number: int):
+    def convert_page_image(self,page_number: int):
         
         """
         Read the output image, and load it into
         OpenCV library
         """
-        path = self.output_path[0]
-        image = cv2.imread(f'{self.output_path[0]}/{self.output_name}-0{page_number}.png')
+        path = self.output_doc_path[0]
+        image = cv2.imread(f'{self.output_doc_path[0]}/{self.output_doc_name}-0{page_number}.png')
         return image
-
-
+    
+#     def get_image_layout(self, page_number: int):
+        
+#         image = self.convert_page_image(page_number)
+#         layout = self.model.detect(image)
+        
+#         return layout
+        
     
     def to_uri_bdata(self, img):
         """
@@ -140,8 +151,8 @@ class GenericParser():
         """
         src = self.to_uri_bdata(img)
         headers = {
-        'app_id': 'mathpix_api_id',
-        'app_key': 'mathpix_api_key',
+        'app_id': 'josefstrauss_sina_com_314870_8defa1',
+        'app_key': '1af27276554898b987df',
         'content-type': 'application/json'}
         
         body = {
@@ -162,17 +173,15 @@ class GenericParser():
         
         return text
         
-    def detect_page_blocks(self, page_number: int):
+    def detect_text_blocks(self, page_number: int):
         """
         Detect all blocks inside a image, and return
         the coordinates of text blocks
         """
-        
-        image = self.convert_image(page_number)
+        image = self.convert_page_image(page_number)
         layout = self.model.detect(image)
         
         text_blocks = lp.Layout([b for b in layout if b.type=='Text' or b.type == 'Title'])
-        figure_blocks = lp.Layout([b for b in layout if b.type=='Figure'])
         
         h, w = image.shape[:2]
         left_interval = lp.Interval(0, w/2*1.05, axis='x').put_on_canvas(image)
@@ -186,6 +195,40 @@ class GenericParser():
         text_blocks = lp.Layout([b.set(id = idx) for idx, b in enumerate(left_blocks + right_blocks)])
         
         return text_blocks
+    
+    def detect_figure_blocks(self, page_number):
+        '''
+        Retrieve all figure areas in side a page image,
+        and save both images & image info
+        '''
+        
+        image = self.convert_page_image(page_number)
+        layout = self.model.detect(image)
+        
+        figure_blocks = lp.Layout([b for b in layout if b.type=='Figure'])
+        
+
+        figure_info = []
+        for i in range(len(figure_blocks)):
+
+            segment_image = (figure_blocks[i]
+                       .pad(left=5, right=5, top=5, bottom=5)
+                       .crop_image(image))
+            img = Image.fromarray(segment_image)
+            img.save(f'{self.output_img_path}/{self.output_doc_name}-page{page_number}-0{i}.png')
+
+            figure_block =  figure_blocks[i].to_dict()
+            coordinates =[figure_block['x_1'], 
+                          figure_block['y_1'],
+                          figure_block['x_2'],
+                          figure_block['y_2']]
+            figure_info.append({'path': f'{self.output_img_path}/{self.output_doc_name}-page{page_number}-0{i}.png',
+                                'coordinates': coordinates,
+                                'page': page_number,
+                                'doc': self.filename})
+        return figure_info
+            
+        
           
     def ocr_by_tesseract(self, page_number: int):
         """
@@ -200,11 +243,11 @@ class GenericParser():
         Returns:
           List[str] -- List of paragraphs
         """
-        blocks = self.detect_page_blocks(page_number)
+        blocks = self.detect_text_blocks(page_number)
         for block in blocks:
             segment_image = (block
                    .pad(left=5, right=5, top=5, bottom=5)
-                   .crop_image(self.convert_image(page_number)))
+                   .crop_image(self.convert_page_image(page_number)))
             
             text = self.ocr_agent.detect(segment_image)
             block.set(text=text, inplace=True)
@@ -225,12 +268,12 @@ class GenericParser():
         Returns:
             List[str] -- List of paragraphs
         """
-        blocks = self.detect_page_blocks(page_number)
+        blocks = self.detect_text_blocks(page_number)
         text_paras = []
         for block in blocks:
             segment_image = (block
                    .pad(left=5, right=5, top=5, bottom=5)
-                   .crop_image(self.convert_image(page_number)))
+                   .crop_image(self.convert_page_image(page_number)))
             text_paras.append(self.mathpix(segment_image))
             
         return text_paras
@@ -251,7 +294,22 @@ class GenericParser():
         
         elif self.method == "mathpix":
             paras_mathpix = self.ocr_by_mathpix(page_number)
-            return paras_mathpix         
+            return paras_mathpix
+        
+    def parse_figure(self):
+        if self.start_page == None:
+            self.start_page = 0
+            
+        if self.end_page == None:
+            self.end_page = len(self.pdf)
+            
+        figures_by_page = []
+        for i in range(self.start_page, self.end_page):
+            print(i)
+            figures_by_page.append({'page': i+1,
+                                   'figures': self.detect_figure_blocks(i)})
+            
+        return figures_by_page
         
         
     def parse_page(self):

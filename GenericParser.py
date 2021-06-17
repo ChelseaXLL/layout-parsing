@@ -65,6 +65,9 @@ class GenericParser():
     def refine_text_block(self,text: str):
         """
         Clean text inside the list
+        
+        Returns:
+            Str: cleaned strings
         """
         text = text.strip()
         text = re.sub(r'(?<=\n)[\t ]+', '', text)
@@ -196,10 +199,14 @@ class GenericParser():
         
         return text_blocks
     
-    def detect_figure_blocks(self, page_number):
+    def detect_figure_blocks(self, page_number: int):
         '''
         Retrieve all figure areas in side a page image,
-        and save both images & image info
+        and save images to the user-defined path.
+        It also returns info about each figures
+        
+        Returns:
+            List[Dict] -- List of dictionary containing 'path', 'coordinates','page', 'doc'
         '''
         
         image = self.convert_page_image(page_number)
@@ -286,6 +293,9 @@ class GenericParser():
         
         if defined method name is "mathpix",
         launch the function: "ocr_by_mathpix"
+        
+        Returns:
+            List[str] -- List of paragraphs
         """
 
         if self.method == "tesseract":
@@ -297,6 +307,12 @@ class GenericParser():
             return paras_mathpix
         
     def parse_figure(self):
+        """
+        This function will return all info about figures
+        inside each page
+        Returns:
+            List[Dict] -- List of dictionaries containing info for each figures
+        """
         if self.start_page == None:
             self.start_page = 0
             

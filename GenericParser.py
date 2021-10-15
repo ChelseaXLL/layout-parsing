@@ -154,8 +154,8 @@ class GenericParser():
         """
         src = self.to_uri_bdata(img)
         headers = {
-        'app_id': 'josefstrauss_sina_com_314870_8defa1',
-        'app_key': '1af27276554898b987df',
+        'app_id': 'api_id',
+        'app_key': 'api_key',
         'content-type': 'application/json'}
         
         body = {
